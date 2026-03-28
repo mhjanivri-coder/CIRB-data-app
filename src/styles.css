@@ -14,4 +14,5 @@ input, select, textarea { width:100%; padding:8px; margin:5px 0 12px 0; }
 label.small { font-size:14px; color:#334155; display:block; }
 .info { background:#eff6ff; border:1px solid #93c5fd; padding:10px; border-radius:8px; margin-top:12px; }
 .summary { background:#f8fafc; border:1px solid #cbd5e1; padding:12px; border-radius:8px; margin-top:12px; }
+.inline-card { border:1px solid #e2e8f0; padding:12px; margin-top:10px; border-radius:8px; background:#fff; }
 @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }

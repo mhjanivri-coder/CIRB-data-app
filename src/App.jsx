@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "buffalo_phase7_clean";
+const STORAGE_KEY = "buffalo_phase8_clean";
 const FEMALE_TABS = ["Pedigree", "Reproduction", "Calving", "Health", "History"];
 const FEMALE_CATEGORIES = ["Heifer", "Milk", "Dry"];
 const PD_OPTIONS = ["Not checked", "Pregnant", "Non-pregnant"];
@@ -26,7 +26,13 @@ const EMPTY_FEMALE_DETAILS = {
     calfCreated: "No",
     notes: "",
   },
-  health: { notes: "" },
+  health: {
+    bodyWeights: [],
+    dewormings: [],
+    vaccinations: [],
+    treatments: [],
+    notes: "",
+  },
   history: { notes: "" },
 };
 
@@ -43,14 +49,21 @@ const EMPTY = {
 
 function addDaysToDateString(dateStr, days) {
   if (!dateStr || !dateStr.includes("/")) return "";
-  const parts = dateStr.split("/").map(Number);
-  if (parts.length !== 3) return "";
-  const [dd, mm, yyyy] = parts;
+  const [dd, mm, yyyy] = dateStr.split("/").map(Number);
   if (!dd || !mm || !yyyy) return "";
   const dt = new Date(yyyy, mm - 1, dd);
   if (Number.isNaN(dt.getTime())) return "";
   dt.setDate(dt.getDate() + days);
   return dt.toLocaleDateString("en-GB");
+}
+
+function buildCalfSire(reproduction) {
+  const bullNo = reproduction?.bullNo || "";
+  const setNo = reproduction?.setNo || "";
+  if (bullNo && setNo) return `${bullNo}/${setNo}`;
+  if (bullNo) return bullNo;
+  if (setNo) return `Set ${setNo}`;
+  return "";
 }
 
 function loadAnimals() {
@@ -63,19 +76,8 @@ function loadAnimals() {
   }
 }
 
-function buildCalfSire(reproduction) {
-  const bullNo = reproduction?.bullNo || "";
-  const setNo = reproduction?.setNo || "";
-  if (bullNo && setNo) return `${bullNo}/${setNo}`;
-  if (bullNo) return bullNo;
-  if (setNo) return `Set ${setNo}`;
-  return "";
-}
-
 function withDefaults(animal) {
-  if (animal.sex !== "Female") {
-    return { ...animal, femaleCategory: "", femaleDetails: undefined };
-  }
+  if (animal.sex !== "Female") return { ...animal, femaleCategory: "", femaleDetails: undefined };
   const reproduction = {
     parity: animal.femaleDetails?.reproduction?.parity || "0",
     aiDate: animal.femaleDetails?.reproduction?.aiDate || "",
@@ -83,9 +85,7 @@ function withDefaults(animal) {
     setNo: animal.femaleDetails?.reproduction?.setNo || "",
     pdStatus: animal.femaleDetails?.reproduction?.pdStatus || "Not checked",
     conceptionDate: animal.femaleDetails?.reproduction?.conceptionDate || "",
-    expectedCalvingDate:
-      animal.femaleDetails?.reproduction?.expectedCalvingDate ||
-      addDaysToDateString(animal.femaleDetails?.reproduction?.conceptionDate || "", 310),
+    expectedCalvingDate: animal.femaleDetails?.reproduction?.expectedCalvingDate || addDaysToDateString(animal.femaleDetails?.reproduction?.conceptionDate || "", 310),
     notes: animal.femaleDetails?.reproduction?.notes || "",
   };
   return {
@@ -105,7 +105,13 @@ function withDefaults(animal) {
         calfCreated: animal.femaleDetails?.calving?.calfCreated || "No",
         notes: animal.femaleDetails?.calving?.notes || "",
       },
-      health: { notes: animal.femaleDetails?.health?.notes || "" },
+      health: {
+        bodyWeights: animal.femaleDetails?.health?.bodyWeights || [],
+        dewormings: animal.femaleDetails?.health?.dewormings || [],
+        vaccinations: animal.femaleDetails?.health?.vaccinations || [],
+        treatments: animal.femaleDetails?.health?.treatments || [],
+        notes: animal.femaleDetails?.health?.notes || "",
+      },
       history: { notes: animal.femaleDetails?.history?.notes || "" },
     },
   };
@@ -130,8 +136,14 @@ function getAnimalSummary(animal) {
   const parity = animal.femaleDetails?.reproduction?.parity || "0";
   const pd = animal.femaleDetails?.reproduction?.pdStatus || "Not checked";
   const calfCreated = animal.femaleDetails?.calving?.calfCreated || "No";
-  return `${animal.femaleCategory || "Heifer"} · Parity ${parity} · PD ${pd} · Calf entry ${calfCreated}`;
+  const tx = animal.femaleDetails?.health?.treatments?.length || 0;
+  return `${animal.femaleCategory || "Heifer"} · Parity ${parity} · PD ${pd} · Calf entry ${calfCreated} · Treatments ${tx}`;
 }
+
+const newBodyWeight = () => ({ date: "", weight: "" });
+const newDeworming = () => ({ date: "", drug: "" });
+const newVaccination = () => ({ date: "", vaccine: "" });
+const newTreatment = () => ({ date: "", diagnosis: "", treatment: "" });
 
 export default function App() {
   const [animals, setAnimals] = useState(() => loadAnimals().map(withDefaults));
@@ -151,10 +163,7 @@ export default function App() {
   const archivedAnimals = animals.filter(a => isArchived(a));
 
   function addAnimal() {
-    if (!form.tag.trim()) {
-      setMsg("Tag No is required.");
-      return;
-    }
+    if (!form.tag.trim()) return setMsg("Tag No is required.");
     const nextAnimal = normalizeAnimal({ id: Date.now(), ...form });
     setAnimals([...animals, nextAnimal]);
     setSelectedId(nextAnimal.id);
@@ -181,10 +190,7 @@ export default function App() {
   }
 
   function saveEdit() {
-    if (!editForm.tag.trim()) {
-      setMsg("Tag No is required.");
-      return;
-    }
+    if (!editForm.tag.trim()) return setMsg("Tag No is required.");
     setAnimals(animals.map(a => a.id === selectedId ? normalizeAnimal({ ...a, ...editForm }) : a));
     setEditing(false);
     setMsg("Animal updated.");
@@ -192,8 +198,7 @@ export default function App() {
 
   function deleteAnimal() {
     if (!selected) return;
-    const ok = window.confirm(`Delete animal ${selected.tag}?`);
-    if (!ok) return;
+    if (!window.confirm(`Delete animal ${selected.tag}?`)) return;
     setAnimals(animals.filter(a => a.id !== selected.id));
     setSelectedId(null);
     setEditing(false);
@@ -201,8 +206,7 @@ export default function App() {
   }
 
   function clearData() {
-    const ok = window.confirm("Clear all browser-saved data?");
-    if (!ok) return;
+    if (!window.confirm("Clear all browser-saved data?")) return;
     setAnimals([]);
     setSelectedId(null);
     setEditing(false);
@@ -214,24 +218,18 @@ export default function App() {
 
   function updateSelectedFemaleDetails(section, key, value) {
     if (!selected || selected.sex !== "Female") return;
-    const nextAnimals = animals.map(a => {
+    setAnimals(animals.map(a => {
       if (a.id !== selected.id) return a;
       const updated = normalizeAnimal({
         ...a,
         femaleDetails: {
           ...a.femaleDetails,
-          [section]: {
-            ...a.femaleDetails?.[section],
-            [key]: value,
-          },
+          [section]: { ...a.femaleDetails?.[section], [key]: value },
         },
       });
-      if (section === "reproduction") {
-        updated.femaleDetails.calving.calfSire = buildCalfSire(updated.femaleDetails.reproduction);
-      }
+      if (section === "reproduction") updated.femaleDetails.calving.calfSire = buildCalfSire(updated.femaleDetails.reproduction);
       return updated;
-    });
-    setAnimals(nextAnimals);
+    }));
   }
 
   function updateSelectedFemaleCategory(value) {
@@ -243,37 +241,58 @@ export default function App() {
     if (!selected || selected.sex !== "Female") return;
     const current = selected.femaleDetails?.reproduction || {};
     const nextRepro = { ...current, [key]: value };
-    if (key === "conceptionDate") {
-      nextRepro.expectedCalvingDate = addDaysToDateString(value, 310);
-    }
-    const nextAnimals = animals.map(a => {
+    if (key === "conceptionDate") nextRepro.expectedCalvingDate = addDaysToDateString(value, 310);
+    setAnimals(animals.map(a => {
       if (a.id !== selected.id) return a;
       const updated = normalizeAnimal({
         ...a,
-        femaleDetails: {
-          ...a.femaleDetails,
-          reproduction: nextRepro,
-        },
+        femaleDetails: { ...a.femaleDetails, reproduction: nextRepro },
       });
       updated.femaleDetails.calving.calfSire = buildCalfSire(updated.femaleDetails.reproduction);
       return updated;
-    });
-    setAnimals(nextAnimals);
+    }));
+  }
+
+  function updateHealthList(listName, index, key, value) {
+    if (!selected || selected.sex !== "Female") return;
+    const currentList = selected.femaleDetails?.health?.[listName] || [];
+    const nextList = currentList.map((item, i) => i === index ? { ...item, [key]: value } : item);
+    setAnimals(animals.map(a => a.id === selected.id ? normalizeAnimal({
+      ...a,
+      femaleDetails: { ...a.femaleDetails, health: { ...a.femaleDetails.health, [listName]: nextList } }
+    }) : a));
+  }
+
+  function addHealthRow(listName) {
+    if (!selected || selected.sex !== "Female") return;
+    const currentList = selected.femaleDetails?.health?.[listName] || [];
+    let row = {};
+    if (listName === "bodyWeights") row = newBodyWeight();
+    if (listName === "dewormings") row = newDeworming();
+    if (listName === "vaccinations") row = newVaccination();
+    if (listName === "treatments") row = newTreatment();
+    setAnimals(animals.map(a => a.id === selected.id ? normalizeAnimal({
+      ...a,
+      femaleDetails: { ...a.femaleDetails, health: { ...a.femaleDetails.health, [listName]: [...currentList, row] } }
+    }) : a));
+  }
+
+  function removeHealthRow(listName, index) {
+    if (!selected || selected.sex !== "Female") return;
+    const currentList = selected.femaleDetails?.health?.[listName] || [];
+    const nextList = currentList.filter((_, i) => i !== index);
+    setAnimals(animals.map(a => a.id === selected.id ? normalizeAnimal({
+      ...a,
+      femaleDetails: { ...a.femaleDetails, health: { ...a.femaleDetails.health, [listName]: nextList } }
+    }) : a));
   }
 
   function createCalfFromSelectedDam() {
     if (!selected || selected.sex !== "Female") return;
     const calfTag = selected.femaleDetails?.calving?.calfTag || "";
     const calvingDate = selected.femaleDetails?.calving?.calvingDate || "";
-    if (!calfTag.trim()) {
-      setMsg("Enter calf tag before creating calf.");
-      return;
-    }
-    const exists = animals.some(a => String(a.tag).trim() === calfTag.trim());
-    if (exists) {
-      setMsg("A calf with this tag already exists.");
-      return;
-    }
+    if (!calfTag.trim()) return setMsg("Enter calf tag before creating calf.");
+    if (animals.some(a => String(a.tag).trim() === calfTag.trim())) return setMsg("A calf with this tag already exists.");
     const calfSex = selected.femaleDetails?.calving?.calfSex || "Male";
     const calf = normalizeAnimal({
       id: Date.now(),
@@ -285,54 +304,25 @@ export default function App() {
       exitReason: "",
       femaleCategory: calfSex === "Female" ? "Heifer" : "",
       femaleDetails: calfSex === "Female" ? {
-        pedigree: {
-          dam: selected.tag,
-          sire: selected.femaleDetails?.calving?.calfSire || "",
-        },
-        reproduction: {
-          parity: "0",
-          aiDate: "",
-          bullNo: "",
-          setNo: "",
-          pdStatus: "Not checked",
-          conceptionDate: "",
-          expectedCalvingDate: "",
-          notes: "",
-        },
-        calving: {
-          calvingDate: "",
-          calfSex: "Male",
-          calfTag: "",
-          calfSire: "",
-          calfCreated: "No",
-          notes: "",
-        },
-        health: { notes: "" },
+        pedigree: { dam: selected.tag, sire: selected.femaleDetails?.calving?.calfSire || "" },
+        reproduction: { parity: "0", aiDate: "", bullNo: "", setNo: "", pdStatus: "Not checked", conceptionDate: "", expectedCalvingDate: "", notes: "" },
+        calving: { calvingDate: "", calfSex: "Male", calfTag: "", calfSire: "", calfCreated: "No", notes: "" },
+        health: { bodyWeights: [], dewormings: [], vaccinations: [], treatments: [], notes: "" },
         history: { notes: "" },
       } : undefined,
     });
-    const nextAnimals = animals.map(a => {
-      if (a.id !== selected.id) return a;
-      return normalizeAnimal({
-        ...a,
-        femaleCategory: "Milk",
-        femaleDetails: {
-          ...a.femaleDetails,
-          calving: {
-            ...a.femaleDetails.calving,
-            calfCreated: "Yes",
-          },
-        },
-      });
-    });
+    const nextAnimals = animals.map(a => a.id === selected.id ? normalizeAnimal({
+      ...a,
+      femaleCategory: "Milk",
+      femaleDetails: { ...a.femaleDetails, calving: { ...a.femaleDetails.calving, calfCreated: "Yes" } }
+    }) : a);
     setAnimals([...nextAnimals, calf]);
     setMsg(`Calf ${calfTag} created from dam ${selected.tag}. Dam moved to Milk.`);
   }
 
   return (
     <div className="container">
-      <h1>Buffalo Herd App - Phase 7</h1>
-
+      <h1>Buffalo Herd App - Phase 8</h1>
       {msg && <div className="msg">{msg}</div>}
 
       <div className="grid">
@@ -341,41 +331,28 @@ export default function App() {
             <h3>Add Animal</h3>
             <label className="small">Tag No</label>
             <input value={form.tag} onChange={e => setForm({ ...form, tag: e.target.value })} />
-
             <label className="small">Sex</label>
             <select value={form.sex} onChange={e => setForm({ ...form, sex: e.target.value, femaleCategory: e.target.value === "Female" ? "Heifer" : "", femaleDetails: e.target.value === "Female" ? EMPTY_FEMALE_DETAILS : undefined })}>
-              <option>Female</option>
-              <option>Male</option>
+              <option>Female</option><option>Male</option>
             </select>
-
-            {form.sex === "Female" && (
-              <>
-                <label className="small">Female Category</label>
-                <select value={form.femaleCategory} onChange={e => setForm({ ...form, femaleCategory: e.target.value })}>
-                  {FEMALE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </>
-            )}
-
+            {form.sex === "Female" && <>
+              <label className="small">Female Category</label>
+              <select value={form.femaleCategory} onChange={e => setForm({ ...form, femaleCategory: e.target.value })}>
+                {FEMALE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </>}
             <label className="small">Date of Birth</label>
             <input placeholder="dd/mm/yyyy" value={form.dob} onChange={e => setForm({ ...form, dob: e.target.value })} />
-
             <label className="small">Status</label>
             <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-              <option>Active</option>
-              <option>Dead</option>
-              <option>Culled</option>
+              <option>Active</option><option>Dead</option><option>Culled</option>
             </select>
-
-            {(form.status === "Dead" || form.status === "Culled") && (
-              <>
-                <label className="small">Exit Date</label>
-                <input placeholder="dd/mm/yyyy" value={form.exitDate} onChange={e => setForm({ ...form, exitDate: e.target.value })} />
-                <label className="small">Exit Reason</label>
-                <input value={form.exitReason} onChange={e => setForm({ ...form, exitReason: e.target.value })} />
-              </>
-            )}
-
+            {(form.status === "Dead" || form.status === "Culled") && <>
+              <label className="small">Exit Date</label>
+              <input placeholder="dd/mm/yyyy" value={form.exitDate} onChange={e => setForm({ ...form, exitDate: e.target.value })} />
+              <label className="small">Exit Reason</label>
+              <input value={form.exitReason} onChange={e => setForm({ ...form, exitReason: e.target.value })} />
+            </>}
             <button onClick={addAnimal}>Add Animal</button>
             <button className="danger" onClick={clearData}>Clear Browser Data</button>
           </div>
@@ -383,21 +360,13 @@ export default function App() {
           <div className="card">
             <h3>Current Herd</h3>
             {currentAnimals.length === 0 && <p>No current animals.</p>}
-            {currentAnimals.map(a => (
-              <button className="listbtn" key={a.id} onClick={() => { setSelectedId(a.id); setFemaleTab("Pedigree"); }}>
-                {a.tag} ({a.sex}){a.sex === "Female" ? ` - ${a.femaleCategory}` : ""} - {a.status}
-              </button>
-            ))}
+            {currentAnimals.map(a => <button className="listbtn" key={a.id} onClick={() => { setSelectedId(a.id); setFemaleTab("Pedigree"); }}>{a.tag} ({a.sex}){a.sex === "Female" ? ` - ${a.femaleCategory}` : ""} - {a.status}</button>)}
           </div>
 
           <div className="card">
             <h3>Archive</h3>
             {archivedAnimals.length === 0 && <p>No archived animals.</p>}
-            {archivedAnimals.map(a => (
-              <button className="listbtn" key={a.id} onClick={() => { setSelectedId(a.id); setFemaleTab("Pedigree"); }}>
-                {a.tag} ({a.sex}) - {a.status}
-              </button>
-            ))}
+            {archivedAnimals.map(a => <button className="listbtn" key={a.id} onClick={() => { setSelectedId(a.id); setFemaleTab("Pedigree"); }}>{a.tag} ({a.sex}) - {a.status}</button>)}
           </div>
         </div>
 
@@ -405,149 +374,163 @@ export default function App() {
           <div className="card">
             <h3>Selected Animal</h3>
             {!selected && <p>No animal selected.</p>}
-            {selected && (
-              <>
-                <p><b>Tag:</b> {selected.tag}</p>
-                <p><b>Sex:</b> {selected.sex}</p>
-                <p><b>DOB:</b> {selected.dob || "-"}</p>
-                <p><b>Status:</b> {selected.status || "Active"}</p>
-                <div className="summary"><b>Summary:</b> {getAnimalSummary(selected)}</div>
-                {(selected.status === "Dead" || selected.status === "Culled") && (
-                  <>
-                    <p><b>Exit Date:</b> {selected.exitDate || "-"}</p>
-                    <p><b>Exit Reason:</b> {selected.exitReason || "-"}</p>
-                  </>
-                )}
-                <button onClick={() => openEdit(selected)}>Edit Animal</button>
-              </>
-            )}
+            {selected && <>
+              <p><b>Tag:</b> {selected.tag}</p>
+              <p><b>Sex:</b> {selected.sex}</p>
+              <p><b>DOB:</b> {selected.dob || "-"}</p>
+              <p><b>Status:</b> {selected.status || "Active"}</p>
+              <div className="summary"><b>Summary:</b> {getAnimalSummary(selected)}</div>
+              {(selected.status === "Dead" || selected.status === "Culled") && <>
+                <p><b>Exit Date:</b> {selected.exitDate || "-"}</p>
+                <p><b>Exit Reason:</b> {selected.exitReason || "-"}</p>
+              </>}
+              <button onClick={() => openEdit(selected)}>Edit Animal</button>
+            </>}
           </div>
 
-          {selected && selected.sex === "Female" && (
-            <div className="card">
-              <h3>Female Workflow</h3>
+          {selected && selected.sex === "Female" && <div className="card">
+            <h3>Female Workflow</h3>
+            <label className="small">Current Female Category</label>
+            <select value={selected.femaleCategory || "Heifer"} onChange={e => updateSelectedFemaleCategory(e.target.value)}>
+              {FEMALE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            </select>
 
-              <label className="small">Current Female Category</label>
-              <select value={selected.femaleCategory || "Heifer"} onChange={e => updateSelectedFemaleCategory(e.target.value)}>
+            <div className="tabs">
+              {FEMALE_TABS.map(tab => <button key={tab} className={`tabbtn ${femaleTab === tab ? "active" : ""}`} onClick={() => setFemaleTab(tab)}>{tab}</button>)}
+            </div>
+
+            {femaleTab === "Pedigree" && <>
+              <label className="small">Sire</label>
+              <input value={selected.femaleDetails?.pedigree?.sire || ""} onChange={e => updateSelectedFemaleDetails("pedigree", "sire", e.target.value)} />
+              <label className="small">Dam</label>
+              <input value={selected.femaleDetails?.pedigree?.dam || ""} onChange={e => updateSelectedFemaleDetails("pedigree", "dam", e.target.value)} />
+            </>}
+
+            {femaleTab === "Reproduction" && <>
+              <label className="small">Current Parity</label>
+              <input value={selected.femaleDetails?.reproduction?.parity || ""} onChange={e => updateSelectedReproduction("parity", e.target.value)} />
+              <label className="small">AI Date</label>
+              <input placeholder="dd/mm/yyyy" value={selected.femaleDetails?.reproduction?.aiDate || ""} onChange={e => updateSelectedReproduction("aiDate", e.target.value)} />
+              <label className="small">Bull No</label>
+              <input value={selected.femaleDetails?.reproduction?.bullNo || ""} onChange={e => updateSelectedReproduction("bullNo", e.target.value)} />
+              <label className="small">Set No</label>
+              <input value={selected.femaleDetails?.reproduction?.setNo || ""} onChange={e => updateSelectedReproduction("setNo", e.target.value)} />
+              <label className="small">PD Status</label>
+              <select value={selected.femaleDetails?.reproduction?.pdStatus || "Not checked"} onChange={e => updateSelectedReproduction("pdStatus", e.target.value)}>
+                {PD_OPTIONS.map(x => <option key={x}>{x}</option>)}
+              </select>
+              <label className="small">Conception Date</label>
+              <input placeholder="dd/mm/yyyy" value={selected.femaleDetails?.reproduction?.conceptionDate || ""} onChange={e => updateSelectedReproduction("conceptionDate", e.target.value)} />
+              <label className="small">Expected Calving Date</label>
+              <input value={selected.femaleDetails?.reproduction?.expectedCalvingDate || ""} readOnly />
+              <label className="small">Reproduction Notes</label>
+              <textarea rows="5" value={selected.femaleDetails?.reproduction?.notes || ""} onChange={e => updateSelectedReproduction("notes", e.target.value)} />
+            </>}
+
+            {femaleTab === "Calving" && <>
+              <label className="small">Calving Date</label>
+              <input placeholder="dd/mm/yyyy" value={selected.femaleDetails?.calving?.calvingDate || ""} onChange={e => updateSelectedFemaleDetails("calving", "calvingDate", e.target.value)} />
+              <label className="small">Calf Sex</label>
+              <select value={selected.femaleDetails?.calving?.calfSex || "Male"} onChange={e => updateSelectedFemaleDetails("calving", "calfSex", e.target.value)}>
+                {CALF_SEX_OPTIONS.map(x => <option key={x}>{x}</option>)}
+              </select>
+              <label className="small">Calf Tag</label>
+              <input value={selected.femaleDetails?.calving?.calfTag || ""} onChange={e => updateSelectedFemaleDetails("calving", "calfTag", e.target.value)} />
+              <label className="small">Calf Sire</label>
+              <input value={selected.femaleDetails?.calving?.calfSire || ""} readOnly />
+              <label className="small">Calf Created</label>
+              <input value={selected.femaleDetails?.calving?.calfCreated || "No"} readOnly />
+              <div className="info">Calf sire is picked automatically from Bull No. and Set No. in Reproduction.</div>
+              <button onClick={createCalfFromSelectedDam}>Create Calf Entry</button>
+              <label className="small">Calving Notes</label>
+              <textarea rows="5" value={selected.femaleDetails?.calving?.notes || ""} onChange={e => updateSelectedFemaleDetails("calving", "notes", e.target.value)} />
+            </>}
+
+            {femaleTab === "Health" && <>
+              <div className="summary"><b>Health Records</b></div>
+
+              <h4>Body Weight</h4>
+              {(selected.femaleDetails?.health?.bodyWeights || []).map((row, idx) => <div key={`bw-${idx}`} className="inline-card">
+                <label className="small">Recording Date</label>
+                <input value={row.date || ""} placeholder="dd/mm/yyyy" onChange={e => updateHealthList("bodyWeights", idx, "date", e.target.value)} />
+                <label className="small">Body Weight</label>
+                <input value={row.weight || ""} onChange={e => updateHealthList("bodyWeights", idx, "weight", e.target.value)} />
+                <button className="danger" onClick={() => removeHealthRow("bodyWeights", idx)}>- Remove</button>
+              </div>)}
+              <button onClick={() => addHealthRow("bodyWeights")}>+ Add Body Weight</button>
+
+              <h4>Deworming</h4>
+              {(selected.femaleDetails?.health?.dewormings || []).map((row, idx) => <div key={`dw-${idx}`} className="inline-card">
+                <label className="small">Deworming Date</label>
+                <input value={row.date || ""} placeholder="dd/mm/yyyy" onChange={e => updateHealthList("dewormings", idx, "date", e.target.value)} />
+                <label className="small">Anthelmintic Used</label>
+                <input value={row.drug || ""} onChange={e => updateHealthList("dewormings", idx, "drug", e.target.value)} />
+                <button className="danger" onClick={() => removeHealthRow("dewormings", idx)}>- Remove</button>
+              </div>)}
+              <button onClick={() => addHealthRow("dewormings")}>+ Add Deworming</button>
+
+              <h4>Vaccination</h4>
+              {(selected.femaleDetails?.health?.vaccinations || []).map((row, idx) => <div key={`vx-${idx}`} className="inline-card">
+                <label className="small">Vaccination Date</label>
+                <input value={row.date || ""} placeholder="dd/mm/yyyy" onChange={e => updateHealthList("vaccinations", idx, "date", e.target.value)} />
+                <label className="small">Vaccine Used</label>
+                <input value={row.vaccine || ""} onChange={e => updateHealthList("vaccinations", idx, "vaccine", e.target.value)} />
+                <button className="danger" onClick={() => removeHealthRow("vaccinations", idx)}>- Remove</button>
+              </div>)}
+              <button onClick={() => addHealthRow("vaccinations")}>+ Add Vaccination</button>
+
+              <h4>Treatment</h4>
+              {(selected.femaleDetails?.health?.treatments || []).map((row, idx) => <div key={`tx-${idx}`} className="inline-card">
+                <label className="small">Treatment Date</label>
+                <input value={row.date || ""} placeholder="dd/mm/yyyy" onChange={e => updateHealthList("treatments", idx, "date", e.target.value)} />
+                <label className="small">Diagnosis</label>
+                <input value={row.diagnosis || ""} onChange={e => updateHealthList("treatments", idx, "diagnosis", e.target.value)} />
+                <label className="small">Treatment Given</label>
+                <textarea rows="3" value={row.treatment || ""} onChange={e => updateHealthList("treatments", idx, "treatment", e.target.value)} />
+                <button className="danger" onClick={() => removeHealthRow("treatments", idx)}>- Remove</button>
+              </div>)}
+              <button onClick={() => addHealthRow("treatments")}>+ Add Treatment</button>
+
+              <label className="small">General Health Notes</label>
+              <textarea rows="5" value={selected.femaleDetails?.health?.notes || ""} onChange={e => updateSelectedFemaleDetails("health", "notes", e.target.value)} />
+            </>}
+
+            {femaleTab === "History" && <>
+              <label className="small">History Notes</label>
+              <textarea rows="5" value={selected.femaleDetails?.history?.notes || ""} onChange={e => updateSelectedFemaleDetails("history", "notes", e.target.value)} />
+            </>}
+          </div>}
+
+          {editing && <div className="card">
+            <h3>Edit Animal</h3>
+            <label className="small">Tag No</label>
+            <input value={editForm.tag} onChange={e => setEditForm({ ...editForm, tag: e.target.value })} />
+            <label className="small">Sex</label>
+            <select value={editForm.sex} onChange={e => setEditForm({ ...editForm, sex: e.target.value })}>
+              <option>Female</option><option>Male</option>
+            </select>
+            {editForm.sex === "Female" && <>
+              <label className="small">Female Category</label>
+              <select value={editForm.femaleCategory || "Heifer"} onChange={e => setEditForm({ ...editForm, femaleCategory: e.target.value })}>
                 {FEMALE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
-
-              <div className="tabs">
-                {FEMALE_TABS.map(tab => (
-                  <button key={tab} className={`tabbtn ${femaleTab === tab ? "active" : ""}`} onClick={() => setFemaleTab(tab)}>
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
-              {femaleTab === "Pedigree" && (
-                <>
-                  <label className="small">Sire</label>
-                  <input value={selected.femaleDetails?.pedigree?.sire || ""} onChange={e => updateSelectedFemaleDetails("pedigree", "sire", e.target.value)} />
-                  <label className="small">Dam</label>
-                  <input value={selected.femaleDetails?.pedigree?.dam || ""} onChange={e => updateSelectedFemaleDetails("pedigree", "dam", e.target.value)} />
-                </>
-              )}
-
-              {femaleTab === "Reproduction" && (
-                <>
-                  <label className="small">Current Parity</label>
-                  <input value={selected.femaleDetails?.reproduction?.parity || ""} onChange={e => updateSelectedReproduction("parity", e.target.value)} />
-                  <label className="small">AI Date</label>
-                  <input placeholder="dd/mm/yyyy" value={selected.femaleDetails?.reproduction?.aiDate || ""} onChange={e => updateSelectedReproduction("aiDate", e.target.value)} />
-                  <label className="small">Bull No</label>
-                  <input value={selected.femaleDetails?.reproduction?.bullNo || ""} onChange={e => updateSelectedReproduction("bullNo", e.target.value)} />
-                  <label className="small">Set No</label>
-                  <input value={selected.femaleDetails?.reproduction?.setNo || ""} onChange={e => updateSelectedReproduction("setNo", e.target.value)} />
-                  <label className="small">PD Status</label>
-                  <select value={selected.femaleDetails?.reproduction?.pdStatus || "Not checked"} onChange={e => updateSelectedReproduction("pdStatus", e.target.value)}>
-                    {PD_OPTIONS.map(x => <option key={x}>{x}</option>)}
-                  </select>
-                  <label className="small">Conception Date</label>
-                  <input placeholder="dd/mm/yyyy" value={selected.femaleDetails?.reproduction?.conceptionDate || ""} onChange={e => updateSelectedReproduction("conceptionDate", e.target.value)} />
-                  <label className="small">Expected Calving Date</label>
-                  <input value={selected.femaleDetails?.reproduction?.expectedCalvingDate || ""} readOnly />
-                  <label className="small">Reproduction Notes</label>
-                  <textarea rows="5" value={selected.femaleDetails?.reproduction?.notes || ""} onChange={e => updateSelectedReproduction("notes", e.target.value)} />
-                </>
-              )}
-
-              {femaleTab === "Calving" && (
-                <>
-                  <label className="small">Calving Date</label>
-                  <input placeholder="dd/mm/yyyy" value={selected.femaleDetails?.calving?.calvingDate || ""} onChange={e => updateSelectedFemaleDetails("calving", "calvingDate", e.target.value)} />
-                  <label className="small">Calf Sex</label>
-                  <select value={selected.femaleDetails?.calving?.calfSex || "Male"} onChange={e => updateSelectedFemaleDetails("calving", "calfSex", e.target.value)}>
-                    {CALF_SEX_OPTIONS.map(x => <option key={x}>{x}</option>)}
-                  </select>
-                  <label className="small">Calf Tag</label>
-                  <input value={selected.femaleDetails?.calving?.calfTag || ""} onChange={e => updateSelectedFemaleDetails("calving", "calfTag", e.target.value)} />
-                  <label className="small">Calf Sire</label>
-                  <input value={selected.femaleDetails?.calving?.calfSire || ""} readOnly />
-                  <label className="small">Calf Created</label>
-                  <input value={selected.femaleDetails?.calving?.calfCreated || "No"} readOnly />
-                  <div className="info">Calf sire is picked automatically from Bull No. and Set No. in Reproduction.</div>
-                  <button onClick={createCalfFromSelectedDam}>Create Calf Entry</button>
-                  <label className="small">Calving Notes</label>
-                  <textarea rows="5" value={selected.femaleDetails?.calving?.notes || ""} onChange={e => updateSelectedFemaleDetails("calving", "notes", e.target.value)} />
-                </>
-              )}
-
-              {femaleTab === "Health" && (
-                <>
-                  <label className="small">Health Notes</label>
-                  <textarea rows="5" value={selected.femaleDetails?.health?.notes || ""} onChange={e => updateSelectedFemaleDetails("health", "notes", e.target.value)} />
-                </>
-              )}
-
-              {femaleTab === "History" && (
-                <>
-                  <label className="small">History Notes</label>
-                  <textarea rows="5" value={selected.femaleDetails?.history?.notes || ""} onChange={e => updateSelectedFemaleDetails("history", "notes", e.target.value)} />
-                </>
-              )}
-            </div>
-          )}
-
-          {editing && (
-            <div className="card">
-              <h3>Edit Animal</h3>
-              <label className="small">Tag No</label>
-              <input value={editForm.tag} onChange={e=>setEditForm({...editForm,tag:e.target.value})} />
-              <label className="small">Sex</label>
-              <select value={editForm.sex} onChange={e=>setEditForm({...editForm,sex:e.target.value})}>
-                <option>Female</option>
-                <option>Male</option>
-              </select>
-              {editForm.sex === "Female" && (
-                <>
-                  <label className="small">Female Category</label>
-                  <select value={editForm.femaleCategory || "Heifer"} onChange={e=>setEditForm({...editForm,femaleCategory:e.target.value})}>
-                    {FEMALE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </>
-              )}
-              <label className="small">Date of Birth</label>
-              <input placeholder="dd/mm/yyyy" value={editForm.dob} onChange={e=>setEditForm({...editForm,dob:e.target.value})} />
-              <label className="small">Status</label>
-              <select value={editForm.status} onChange={e=>setEditForm({...editForm,status:e.target.value})}>
-                <option>Active</option>
-                <option>Dead</option>
-                <option>Culled</option>
-              </select>
-              {(editForm.status === "Dead" || editForm.status === "Culled") && (
-                <>
-                  <label className="small">Exit Date</label>
-                  <input placeholder="dd/mm/yyyy" value={editForm.exitDate} onChange={e=>setEditForm({...editForm,exitDate:e.target.value})} />
-                  <label className="small">Exit Reason</label>
-                  <input value={editForm.exitReason} onChange={e=>setEditForm({...editForm,exitReason:e.target.value})} />
-                </>
-              )}
-              <button onClick={saveEdit}>Save Changes</button>
-              <button className="danger" onClick={deleteAnimal}>Delete Animal</button>
-              <button onClick={() => setEditing(false)}>Cancel</button>
-            </div>
-          )}
+            </>}
+            <label className="small">Date of Birth</label>
+            <input placeholder="dd/mm/yyyy" value={editForm.dob} onChange={e => setEditForm({ ...editForm, dob: e.target.value })} />
+            <label className="small">Status</label>
+            <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
+              <option>Active</option><option>Dead</option><option>Culled</option>
+            </select>
+            {(editForm.status === "Dead" || editForm.status === "Culled") && <>
+              <label className="small">Exit Date</label>
+              <input placeholder="dd/mm/yyyy" value={editForm.exitDate} onChange={e => setEditForm({ ...editForm, exitDate: e.target.value })} />
+              <label className="small">Exit Reason</label>
+              <input value={editForm.exitReason} onChange={e => setEditForm({ ...editForm, exitReason: e.target.value })} />
+            </>}
+            <button onClick={saveEdit}>Save Changes</button>
+            <button className="danger" onClick={deleteAnimal}>Delete Animal</button>
+            <button onClick={() => setEditing(false)}>Cancel</button>
+          </div>}
         </div>
       </div>
     </div>
