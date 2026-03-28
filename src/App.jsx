@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "buffalo_phase4_clean";
+const STORAGE_KEY = "buffalo_phase5_clean";
 const FEMALE_TABS = ["Pedigree", "Reproduction", "Calving", "Health", "History"];
 const FEMALE_CATEGORIES = ["Heifer", "Milk", "Dry"];
+const PD_OPTIONS = ["Not checked", "Pregnant", "Non-pregnant"];
 
 const EMPTY_FEMALE_DETAILS = {
   pedigree: { sire: "", dam: "" },
-  reproduction: { notes: "" },
+  reproduction: {
+    parity: "0",
+    aiDate: "",
+    bullNo: "",
+    setNo: "",
+    pdStatus: "Not checked",
+    conceptionDate: "",
+    expectedCalvingDate: "",
+    notes: "",
+  },
   calving: { notes: "" },
   health: { notes: "" },
   history: { notes: "" },
@@ -22,6 +32,18 @@ const EMPTY = {
   femaleCategory: "Heifer",
   femaleDetails: EMPTY_FEMALE_DETAILS,
 };
+
+function addDaysToDateString(dateStr, days) {
+  if (!dateStr || !dateStr.includes("/")) return "";
+  const parts = dateStr.split("/").map(Number);
+  if (parts.length !== 3) return "";
+  const [dd, mm, yyyy] = parts;
+  if (!dd || !mm || !yyyy) return "";
+  const dt = new Date(yyyy, mm - 1, dd);
+  if (Number.isNaN(dt.getTime())) return "";
+  dt.setDate(dt.getDate() + days);
+  return dt.toLocaleDateString("en-GB");
+}
 
 function loadAnimals() {
   try {
@@ -50,6 +72,15 @@ function withDefaults(animal) {
         dam: animal.femaleDetails?.pedigree?.dam || "",
       },
       reproduction: {
+        parity: animal.femaleDetails?.reproduction?.parity || "0",
+        aiDate: animal.femaleDetails?.reproduction?.aiDate || "",
+        bullNo: animal.femaleDetails?.reproduction?.bullNo || "",
+        setNo: animal.femaleDetails?.reproduction?.setNo || "",
+        pdStatus: animal.femaleDetails?.reproduction?.pdStatus || "Not checked",
+        conceptionDate: animal.femaleDetails?.reproduction?.conceptionDate || "",
+        expectedCalvingDate:
+          animal.femaleDetails?.reproduction?.expectedCalvingDate ||
+          addDaysToDateString(animal.femaleDetails?.reproduction?.conceptionDate || "", 310),
         notes: animal.femaleDetails?.reproduction?.notes || "",
       },
       calving: {
@@ -184,9 +215,29 @@ export default function App(){
     setAnimals(animals.map(a => a.id === selected.id ? normalizeAnimal({ ...a, femaleCategory: value }) : a));
   }
 
+  function updateSelectedReproduction(key, value) {
+    if (!selected || selected.sex !== "Female") return;
+    const current = selected.femaleDetails?.reproduction || {};
+    const nextRepro = { ...current, [key]: value };
+    if (key === "conceptionDate") {
+      nextRepro.expectedCalvingDate = addDaysToDateString(value, 310);
+    }
+    const nextAnimals = animals.map(a => {
+      if (a.id !== selected.id) return a;
+      return normalizeAnimal({
+        ...a,
+        femaleDetails: {
+          ...a.femaleDetails,
+          reproduction: nextRepro,
+        },
+      });
+    });
+    setAnimals(nextAnimals);
+  }
+
   return(
     <div className="container">
-      <h1>Buffalo Herd App - Phase 4</h1>
+      <h1>Buffalo Herd App - Phase 5</h1>
 
       {msg && <div className="msg">{msg}</div>}
 
@@ -290,7 +341,10 @@ export default function App(){
                 <p><b>DOB:</b> {selected.dob || "-"}</p>
                 <p><b>Status:</b> {selected.status || "Active"}</p>
                 {selected.sex === "Female" && (
-                  <p><b>Female Category:</b> {selected.femaleCategory}</p>
+                  <>
+                    <p><b>Female Category:</b> {selected.femaleCategory}</p>
+                    <p><b>Parity:</b> {selected.femaleDetails?.reproduction?.parity || "0"}</p>
+                  </>
                 )}
                 {(selected.status === "Dead" || selected.status === "Culled") && (
                   <>
@@ -344,11 +398,57 @@ export default function App(){
 
               {femaleTab === "Reproduction" && (
                 <>
+                  <label className="small">Current Parity</label>
+                  <input
+                    value={selected.femaleDetails?.reproduction?.parity || ""}
+                    onChange={e => updateSelectedReproduction("parity", e.target.value)}
+                  />
+
+                  <label className="small">AI Date</label>
+                  <input
+                    placeholder="dd/mm/yyyy"
+                    value={selected.femaleDetails?.reproduction?.aiDate || ""}
+                    onChange={e => updateSelectedReproduction("aiDate", e.target.value)}
+                  />
+
+                  <label className="small">Bull No</label>
+                  <input
+                    value={selected.femaleDetails?.reproduction?.bullNo || ""}
+                    onChange={e => updateSelectedReproduction("bullNo", e.target.value)}
+                  />
+
+                  <label className="small">Set No</label>
+                  <input
+                    value={selected.femaleDetails?.reproduction?.setNo || ""}
+                    onChange={e => updateSelectedReproduction("setNo", e.target.value)}
+                  />
+
+                  <label className="small">PD Status</label>
+                  <select
+                    value={selected.femaleDetails?.reproduction?.pdStatus || "Not checked"}
+                    onChange={e => updateSelectedReproduction("pdStatus", e.target.value)}
+                  >
+                    {PD_OPTIONS.map(x => <option key={x}>{x}</option>)}
+                  </select>
+
+                  <label className="small">Conception Date</label>
+                  <input
+                    placeholder="dd/mm/yyyy"
+                    value={selected.femaleDetails?.reproduction?.conceptionDate || ""}
+                    onChange={e => updateSelectedReproduction("conceptionDate", e.target.value)}
+                  />
+
+                  <label className="small">Expected Calving Date</label>
+                  <input
+                    value={selected.femaleDetails?.reproduction?.expectedCalvingDate || ""}
+                    readOnly
+                  />
+
                   <label className="small">Reproduction Notes</label>
                   <textarea
                     rows="5"
                     value={selected.femaleDetails?.reproduction?.notes || ""}
-                    onChange={e => updateSelectedFemaleDetails("reproduction", "notes", e.target.value)}
+                    onChange={e => updateSelectedReproduction("notes", e.target.value)}
                   />
                 </>
               )}
