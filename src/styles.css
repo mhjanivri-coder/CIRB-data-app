@@ -1,6 +1,10 @@
 
-body { font-family: Arial; padding: 20px; }
-.container { max-width: 800px; margin: auto; }
-.card { border:1px solid #ccc; padding:10px; margin-top:10px; }
-button { padding:10px; margin-top:10px; }
-input, select { width:100%; padding:8px; margin:5px 0; }
+body { font-family: Arial; padding: 20px; background: #f8fafc; }
+.container { max-width: 900px; margin: auto; }
+.card { border:1px solid #ccc; padding:16px; margin-top:16px; background: white; border-radius: 10px; }
+button { padding:10px 14px; margin:6px 6px 0 0; cursor:pointer; }
+input, select { width:100%; padding:8px; margin:5px 0 12px 0; }
+.grid { display:grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.msg { background:#ecfdf5; border:1px solid #86efac; padding:10px; border-radius:8px; margin-top:12px; }
+.listbtn { display:block; width:100%; text-align:left; }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
