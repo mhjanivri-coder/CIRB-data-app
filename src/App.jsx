@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "buffalo_phase5_clean";
+const STORAGE_KEY = "buffalo_phase6_clean";
 const FEMALE_TABS = ["Pedigree", "Reproduction", "Calving", "Health", "History"];
 const FEMALE_CATEGORIES = ["Heifer", "Milk", "Dry"];
 const PD_OPTIONS = ["Not checked", "Pregnant", "Non-pregnant"];
+const CALF_SEX_OPTIONS = ["Male", "Female"];
 
 const EMPTY_FEMALE_DETAILS = {
   pedigree: { sire: "", dam: "" },
@@ -17,7 +18,13 @@ const EMPTY_FEMALE_DETAILS = {
     expectedCalvingDate: "",
     notes: "",
   },
-  calving: { notes: "" },
+  calving: {
+    calvingDate: "",
+    calfSex: "Male",
+    calfTag: "",
+    calfSire: "",
+    notes: "",
+  },
   health: { notes: "" },
   history: { notes: "" },
 };
@@ -55,6 +62,15 @@ function loadAnimals() {
   }
 }
 
+function buildCalfSire(reproduction) {
+  const bullNo = reproduction?.bullNo || "";
+  const setNo = reproduction?.setNo || "";
+  if (bullNo && setNo) return `${bullNo}/${setNo}`;
+  if (bullNo) return bullNo;
+  if (setNo) return `Set ${setNo}`;
+  return "";
+}
+
 function withDefaults(animal) {
   if (animal.sex !== "Female") {
     return {
@@ -63,6 +79,18 @@ function withDefaults(animal) {
       femaleDetails: undefined,
     };
   }
+  const reproduction = {
+    parity: animal.femaleDetails?.reproduction?.parity || "0",
+    aiDate: animal.femaleDetails?.reproduction?.aiDate || "",
+    bullNo: animal.femaleDetails?.reproduction?.bullNo || "",
+    setNo: animal.femaleDetails?.reproduction?.setNo || "",
+    pdStatus: animal.femaleDetails?.reproduction?.pdStatus || "Not checked",
+    conceptionDate: animal.femaleDetails?.reproduction?.conceptionDate || "",
+    expectedCalvingDate:
+      animal.femaleDetails?.reproduction?.expectedCalvingDate ||
+      addDaysToDateString(animal.femaleDetails?.reproduction?.conceptionDate || "", 310),
+    notes: animal.femaleDetails?.reproduction?.notes || "",
+  };
   return {
     ...animal,
     femaleCategory: animal.femaleCategory || "Heifer",
@@ -71,19 +99,12 @@ function withDefaults(animal) {
         sire: animal.femaleDetails?.pedigree?.sire || "",
         dam: animal.femaleDetails?.pedigree?.dam || "",
       },
-      reproduction: {
-        parity: animal.femaleDetails?.reproduction?.parity || "0",
-        aiDate: animal.femaleDetails?.reproduction?.aiDate || "",
-        bullNo: animal.femaleDetails?.reproduction?.bullNo || "",
-        setNo: animal.femaleDetails?.reproduction?.setNo || "",
-        pdStatus: animal.femaleDetails?.reproduction?.pdStatus || "Not checked",
-        conceptionDate: animal.femaleDetails?.reproduction?.conceptionDate || "",
-        expectedCalvingDate:
-          animal.femaleDetails?.reproduction?.expectedCalvingDate ||
-          addDaysToDateString(animal.femaleDetails?.reproduction?.conceptionDate || "", 310),
-        notes: animal.femaleDetails?.reproduction?.notes || "",
-      },
+      reproduction,
       calving: {
+        calvingDate: animal.femaleDetails?.calving?.calvingDate || "",
+        calfSex: animal.femaleDetails?.calving?.calfSex || "Male",
+        calfTag: animal.femaleDetails?.calving?.calfTag || "",
+        calfSire: animal.femaleDetails?.calving?.calfSire || buildCalfSire(reproduction),
         notes: animal.femaleDetails?.calving?.notes || "",
       },
       health: {
@@ -196,7 +217,7 @@ export default function App(){
     if (!selected || selected.sex !== "Female") return;
     const nextAnimals = animals.map(a => {
       if (a.id !== selected.id) return a;
-      return normalizeAnimal({
+      const updated = normalizeAnimal({
         ...a,
         femaleDetails: {
           ...a.femaleDetails,
@@ -206,6 +227,10 @@ export default function App(){
           },
         },
       });
+      if (section === "reproduction") {
+        updated.femaleDetails.calving.calfSire = buildCalfSire(updated.femaleDetails.reproduction);
+      }
+      return updated;
     });
     setAnimals(nextAnimals);
   }
@@ -224,20 +249,78 @@ export default function App(){
     }
     const nextAnimals = animals.map(a => {
       if (a.id !== selected.id) return a;
-      return normalizeAnimal({
+      const updated = normalizeAnimal({
         ...a,
         femaleDetails: {
           ...a.femaleDetails,
           reproduction: nextRepro,
         },
       });
+      updated.femaleDetails.calving.calfSire = buildCalfSire(updated.femaleDetails.reproduction);
+      return updated;
     });
     setAnimals(nextAnimals);
   }
 
+  function createCalfFromSelectedDam() {
+    if (!selected || selected.sex !== "Female") return;
+    const calfTag = selected.femaleDetails?.calving?.calfTag || "";
+    const calvingDate = selected.femaleDetails?.calving?.calvingDate || "";
+    if (!calfTag.trim()) {
+      setMsg("Enter calf tag before creating calf.");
+      return;
+    }
+    const exists = animals.some(a => String(a.tag).trim() === calfTag.trim());
+    if (exists) {
+      setMsg("A calf with this tag already exists.");
+      return;
+    }
+    const calfSex = selected.femaleDetails?.calving?.calfSex || "Male";
+    const calf = normalizeAnimal({
+      id: Date.now(),
+      tag: calfTag.trim(),
+      sex: calfSex,
+      dob: calvingDate,
+      status: "Active",
+      exitDate: "",
+      exitReason: "",
+      femaleCategory: calfSex === "Female" ? "Heifer" : "",
+      femaleDetails: calfSex === "Female"
+        ? {
+            pedigree: {
+              dam: selected.tag,
+              sire: selected.femaleDetails?.calving?.calfSire || "",
+            },
+            reproduction: {
+              parity: "0",
+              aiDate: "",
+              bullNo: "",
+              setNo: "",
+              pdStatus: "Not checked",
+              conceptionDate: "",
+              expectedCalvingDate: "",
+              notes: "",
+            },
+            calving: {
+              calvingDate: "",
+              calfSex: "Male",
+              calfTag: "",
+              calfSire: "",
+              notes: "",
+            },
+            health: { notes: "" },
+            history: { notes: "" },
+          }
+        : undefined,
+    });
+    const nextAnimals = [...animals, calf];
+    setAnimals(nextAnimals);
+    setMsg(`Calf ${calfTag} created from dam ${selected.tag}.`);
+  }
+
   return(
     <div className="container">
-      <h1>Buffalo Herd App - Phase 5</h1>
+      <h1>Buffalo Herd App - Phase 6</h1>
 
       {msg && <div className="msg">{msg}</div>}
 
@@ -455,6 +538,39 @@ export default function App(){
 
               {femaleTab === "Calving" && (
                 <>
+                  <label className="small">Calving Date</label>
+                  <input
+                    placeholder="dd/mm/yyyy"
+                    value={selected.femaleDetails?.calving?.calvingDate || ""}
+                    onChange={e => updateSelectedFemaleDetails("calving", "calvingDate", e.target.value)}
+                  />
+
+                  <label className="small">Calf Sex</label>
+                  <select
+                    value={selected.femaleDetails?.calving?.calfSex || "Male"}
+                    onChange={e => updateSelectedFemaleDetails("calving", "calfSex", e.target.value)}
+                  >
+                    {CALF_SEX_OPTIONS.map(x => <option key={x}>{x}</option>)}
+                  </select>
+
+                  <label className="small">Calf Tag</label>
+                  <input
+                    value={selected.femaleDetails?.calving?.calfTag || ""}
+                    onChange={e => updateSelectedFemaleDetails("calving", "calfTag", e.target.value)}
+                  />
+
+                  <label className="small">Calf Sire</label>
+                  <input
+                    value={selected.femaleDetails?.calving?.calfSire || ""}
+                    readOnly
+                  />
+
+                  <div className="info">
+                    Calf sire is picked automatically from Bull No. and Set No. in Reproduction.
+                  </div>
+
+                  <button onClick={createCalfFromSelectedDam}>Create Calf Entry</button>
+
                   <label className="small">Calving Notes</label>
                   <textarea
                     rows="5"
