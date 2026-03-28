@@ -7,4 +7,5 @@ input, select { width:100%; padding:8px; margin:5px 0 12px 0; }
 .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .msg { background:#ecfdf5; border:1px solid #86efac; padding:10px; border-radius:8px; margin-top:12px; }
 .listbtn { display:block; width:100%; text-align:left; }
+.danger { background:#fee2e2; border:1px solid #ef4444; }
 @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
